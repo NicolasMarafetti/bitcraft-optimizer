@@ -1,0 +1,79 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "windows"]
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model BitCraftItem {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String   @unique
+  tier        Int
+  type        String   // 'resource', 'crafted', 'tool', 'equipment'
+  description String?
+  rarity      String?  // 'common', 'uncommon', 'rare', 'epic', 'legendary'
+  imageUrl    String?
+  farmingTime Int?     // en minutes
+  craftingTime Int?    // en minutes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  prices        ItemPrice[]
+  craftingCosts CraftingCost[]
+  materials     CraftingCost[] @relation("MaterialFor")
+  
+  @@map("bitcraft_items")
+}
+
+model CraftingCost {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  quantity  Int
+  
+  // Relations
+  item       BitCraftItem @relation(fields: [itemId], references: [id])
+  itemId     String       @db.ObjectId
+  
+  material   BitCraftItem @relation("MaterialFor", fields: [materialId], references: [id])
+  materialId String       @db.ObjectId
+  
+  @@map("crafting_costs")
+}
+
+model ItemPrice {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  price       Float
+  cityName    String
+  lastUpdated DateTime @default(now())
+  
+  // Relations
+  item   BitCraftItem @relation(fields: [itemId], references: [id])
+  itemId String       @db.ObjectId
+  
+  @@unique([itemId, cityName])
+  @@map("item_prices")
+}
+
+model FarmingLocation {
+  id          String @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  difficulty  String // 'easy', 'medium', 'hard'
+  
+  // Relations avec les objets disponibles
+  availableItems String[] @db.ObjectId
+  
+  @@map("farming_locations")
+}
+
+model UserSession {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  cityName  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("user_sessions")
+}
