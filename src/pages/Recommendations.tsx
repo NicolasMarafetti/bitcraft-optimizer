@@ -105,14 +105,21 @@ export default function Recommendations() {
           </h2>
           <div className="space-y-3">
             {craftingRecommendations.length > 0 ? (
-              craftingRecommendations.slice(0, 3).map((rec, index) => (
-                <div key={rec.item.id} className="bg-white p-4 rounded-lg border border-gray-200">
+              craftingRecommendations.slice(0, 3).map((rec, index) => {
+                const isLowMargin = rec.profitMargin < 20
+                return (
+                <div key={rec.item.id} className={`p-4 rounded-lg border ${
+                  isLowMargin 
+                    ? 'bg-orange-50 border-orange-200' 
+                    : 'bg-white border-gray-200'
+                }`}>
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">
                       <h3 className="font-medium text-bitcraft-dark">{rec.item.name}</h3>
                       <p className="text-sm text-gray-600">
                         Tier {rec.item.tier} • Coût total: {formatProfit(rec.craftingCost)}
                         {index === 0 && <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">🏆 Meilleur</span>}
+                        {isLowMargin && <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">⚠️ Faible marge</span>}
                       </p>
                       {rec.item.craftingTime && (
                         <p className="text-xs text-gray-500 mt-1">
@@ -121,7 +128,9 @@ export default function Recommendations() {
                       )}
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-semibold text-bitcraft-accent">
+                      <div className={`text-lg font-semibold ${
+                        isLowMargin ? 'text-orange-600' : 'text-bitcraft-accent'
+                      }`}>
                         +{formatProfitMargin(rec.profitMargin)}
                       </div>
                       <div className="text-xs text-gray-500 mb-1">
@@ -136,7 +145,11 @@ export default function Recommendations() {
                       <button
                         onClick={() => handleSetSaleOrder(rec)}
                         disabled={updatingPrices.has(rec.item.id)}
-                        className="text-xs bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`text-xs px-3 py-1 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          isLowMargin 
+                            ? 'bg-orange-500 text-white hover:bg-orange-600' 
+                            : 'bg-green-500 text-white hover:bg-green-600'
+                        }`}
                       >
                         {updatingPrices.has(rec.item.id) ? '⏳' : '📋 Ordre mis'}
                       </button>
@@ -164,7 +177,8 @@ export default function Recommendations() {
                     </div>
                   </div>
                 </div>
-              ))
+                )
+              })
             ) : (
               <div className="text-center mt-4 text-gray-500">
                 <p>Aucun craft rentable trouvé. Les recettes de craft ne sont pas encore définies.</p>

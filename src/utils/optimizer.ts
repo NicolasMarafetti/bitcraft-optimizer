@@ -46,21 +46,21 @@ export const calculateCraftingRecommendations = async (cityName: string): Promis
     if (materials.length === 0) continue // Impossible de calculer si prix des matériaux manquants
 
     const totalCost = materials.reduce((sum: number, material: CraftingMaterial) => sum + material.cost, 0)
-    
+
     // Calculer le prix de vente suggéré avec marge limitée à 20%
     let suggestedPrice: number
     const maxPriceWithMargin = Math.ceil(totalCost * MAX_PROFIT_MARGIN)
-    
-    
+
+
     if (itemPrice) {
       // Si l'objet a un prix, undercut selon le pourcentage défini mais limité à 20% de marge
-      const undercutPrice = Math.ceil(itemPrice * UNDERCUT_PERCENTAGE)
+      const undercutPrice = Math.floor(itemPrice * UNDERCUT_PERCENTAGE)
       suggestedPrice = Math.min(undercutPrice, maxPriceWithMargin)
     } else {
       // Si l'objet n'a pas de prix, vendre avec 20% de marge maximum
       suggestedPrice = maxPriceWithMargin
     }
-    
+
     const profitPerCraft = suggestedPrice - totalCost
     const profitMargin = totalCost > 0 ? (profitPerCraft / totalCost) * 100 : 0
 
@@ -75,7 +75,6 @@ export const calculateCraftingRecommendations = async (cityName: string): Promis
   }
 
   return recommendations
-    .filter(rec => rec.profitMargin > 0) // Seulement les crafts rentables
     .sort((a, b) => b.profitMargin - a.profitMargin)
 }
 
