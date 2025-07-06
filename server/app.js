@@ -35,7 +35,7 @@ app.get('/api/items', async (req, res) => {
 app.post('/api/items/init', async (req, res) => {
   try {
     const { items } = req.body
-    
+
     if (!items || !Array.isArray(items)) {
       return res.status(400).json({ error: 'Liste d\'objets requise' })
     }
@@ -66,11 +66,11 @@ app.post('/api/items/init', async (req, res) => {
       })
       createdCount++
     }
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: `${createdCount} objets initialisés`,
-      count: createdCount 
+      count: createdCount
     })
   } catch (error) {
     console.error('Erreur lors de l\'initialisation des objets:', error)
@@ -81,19 +81,19 @@ app.post('/api/items/init', async (req, res) => {
 app.post('/api/items', async (req, res) => {
   try {
     const { name, tier, imageUrl } = req.body
-    
+
     if (!name || !tier) {
       return res.status(400).json({ error: 'Le nom et le tier sont requis' })
     }
-    
+
     const existingItem = await prisma.bitCraftItem.findUnique({
       where: { name }
     })
-    
+
     if (existingItem) {
       return res.status(409).json({ error: 'Un objet avec ce nom existe déjà' })
     }
-    
+
     const newItem = await prisma.bitCraftItem.create({
       data: {
         name,
@@ -102,7 +102,7 @@ app.post('/api/items', async (req, res) => {
         imageUrl: imageUrl || null
       }
     })
-    
+
     res.status(201).json(newItem)
   } catch (error) {
     console.error('Erreur lors de la création de l\'objet:', error)
@@ -110,26 +110,55 @@ app.post('/api/items', async (req, res) => {
   }
 })
 
-app.delete('/api/items/:itemId', async (req, res) => {
+app.put('/api/items/:itemId', async (req, res) => {
   try {
     const { itemId } = req.params
-    
+    const updates = req.body
+
     const item = await prisma.bitCraftItem.findUnique({
       where: { id: itemId }
     })
-    
+
     if (!item) {
       return res.status(404).json({ error: 'Objet non trouvé' })
     }
-    
+
+    const updatedItem = await prisma.bitCraftItem.update({
+      where: { id: itemId },
+      data: updates
+    })
+
+    res.json({ success: true, item: updatedItem })
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour de l\'objet:', error)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
+app.delete('/api/items/:itemId', async (req, res) => {
+  try {
+    const { itemId } = req.params
+
+    console.log('Delete item: ', itemId);
+
+    const item = await prisma.bitCraftItem.findUnique({
+      where: { id: itemId }
+    })
+
+    console.log('item: ', item);
+
+    if (!item) {
+      return res.status(404).json({ error: 'Objet non trouvé' })
+    }
+
     await prisma.itemPrice.deleteMany({
       where: { itemId: itemId }
     })
-    
+
     await prisma.bitCraftItem.delete({
       where: { id: itemId }
     })
-    
+
     res.json({ success: true })
   } catch (error) {
     console.error('Erreur lors de la suppression de l\'objet:', error)
@@ -141,7 +170,7 @@ app.delete('/api/items/:itemId', async (req, res) => {
 app.get('/api/prices/:cityName', async (req, res) => {
   try {
     const { cityName } = req.params
-    
+
     const prices = await prisma.itemPrice.findMany({
       where: { cityName },
       include: {
@@ -151,7 +180,7 @@ app.get('/api/prices/:cityName', async (req, res) => {
         lastUpdated: 'desc'
       }
     })
-    
+
     res.json(prices)
   } catch (error) {
     console.error('Erreur lors de la récupération des prix:', error)
@@ -162,15 +191,15 @@ app.get('/api/prices/:cityName', async (req, res) => {
 app.get('/api/prices/:cityName/:itemName', async (req, res) => {
   try {
     const { cityName, itemName } = req.params
-    
+
     const item = await prisma.bitCraftItem.findUnique({
       where: { name: itemName }
     })
-    
+
     if (!item) {
       return res.status(404).json({ error: 'Objet non trouvé' })
     }
-    
+
     const price = await prisma.itemPrice.findUnique({
       where: {
         itemId_cityName: {
@@ -179,11 +208,11 @@ app.get('/api/prices/:cityName/:itemName', async (req, res) => {
         }
       }
     })
-    
+
     if (!price) {
       return res.json({ price: null })
     }
-    
+
     res.json({ price: price.price })
   } catch (error) {
     console.error('Erreur lors de la récupération du prix:', error)
@@ -194,19 +223,19 @@ app.get('/api/prices/:cityName/:itemName', async (req, res) => {
 app.post('/api/prices', async (req, res) => {
   try {
     const { itemName, price, cityName } = req.body
-    
+
     if (!itemName || price == null || !cityName) {
       return res.status(400).json({ error: 'itemName, price et cityName sont requis' })
     }
-    
+
     const item = await prisma.bitCraftItem.findUnique({
       where: { name: itemName }
     })
-    
+
     if (!item) {
       return res.status(404).json({ error: 'Objet non trouvé' })
     }
-    
+
     const itemPrice = await prisma.itemPrice.upsert({
       where: {
         itemId_cityName: {
@@ -225,7 +254,7 @@ app.post('/api/prices', async (req, res) => {
         lastUpdated: new Date()
       }
     })
-    
+
     res.json({
       id: itemPrice.id,
       price: itemPrice.price,
@@ -241,15 +270,15 @@ app.post('/api/prices', async (req, res) => {
 app.delete('/api/prices/:cityName/:itemName', async (req, res) => {
   try {
     const { cityName, itemName } = req.params
-    
+
     const item = await prisma.bitCraftItem.findUnique({
       where: { name: itemName }
     })
-    
+
     if (!item) {
       return res.status(404).json({ error: 'Objet non trouvé' })
     }
-    
+
     await prisma.itemPrice.delete({
       where: {
         itemId_cityName: {
@@ -258,10 +287,91 @@ app.delete('/api/prices/:cityName/:itemName', async (req, res) => {
         }
       }
     })
-    
+
     res.json({ success: true })
   } catch (error) {
     console.error('Erreur lors de la suppression du prix:', error)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
+// Routes pour les recettes de craft
+app.get('/api/items/:itemId/recipe', async (req, res) => {
+  try {
+    const { itemId } = req.params
+
+    const materials = await prisma.craftingCost.findMany({
+      where: { itemId },
+      include: {
+        material: true
+      }
+    })
+
+    const result = materials.map(cost => ({
+      itemId: cost.materialId,
+      quantity: cost.quantity,
+      item: cost.material
+    }))
+
+    res.json({ materials: result })
+  } catch (error) {
+    console.error('Erreur lors de la récupération de la recette:', error)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
+app.post('/api/items/:itemId/recipe', async (req, res) => {
+  try {
+    const { itemId } = req.params
+    const { materials } = req.body
+
+    if (!materials || !Array.isArray(materials)) {
+      return res.status(400).json({ error: 'Liste de matériaux requise' })
+    }
+
+    // Vérifier que l'objet existe
+    const item = await prisma.bitCraftItem.findUnique({
+      where: { id: itemId }
+    })
+
+    if (!item) {
+      return res.status(404).json({ error: 'Objet non trouvé' })
+    }
+
+    // Supprimer les anciennes recettes si elles existent
+    await prisma.craftingCost.deleteMany({
+      where: { itemId }
+    })
+
+    // Créer les nouvelles recettes
+    if (materials.length > 0) {
+      await prisma.craftingCost.createMany({
+        data: materials.map(material => ({
+          itemId,
+          materialId: material.itemId,
+          quantity: material.quantity
+        }))
+      })
+    }
+
+    res.json({ success: true, message: 'Recette mise à jour avec succès' })
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour de la recette:', error)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
+app.delete('/api/items/:itemId/recipe', async (req, res) => {
+  try {
+    const { itemId } = req.params
+
+    await prisma.craftingCost.deleteMany({
+      where: { itemId }
+    })
+
+    res.json({ success: true, message: 'Recette supprimée avec succès' })
+  } catch (error) {
+    console.error('Erreur lors de la suppression de la recette:', error)
     res.status(500).json({ error: 'Erreur serveur' })
   }
 })
@@ -275,7 +385,7 @@ app.get('/api/cities', async (req, res) => {
       },
       distinct: ['cityName']
     })
-    
+
     const cities = result.map(r => r.cityName).sort()
     res.json(cities)
   } catch (error) {

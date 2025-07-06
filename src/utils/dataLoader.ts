@@ -2,25 +2,7 @@ import { BitCraftItem, CraftingCost } from '../types'
 import { api } from '../lib/api'
 
 export const loadBitCraftItems = async (): Promise<BitCraftItem[]> => {
-  try {
-    const items = await api.getItems()
-    
-    return items.map(item => ({
-      id: item.id,
-      name: item.name,
-      tier: item.tier,
-      type: item.type as 'resource' | 'crafted' | 'tool' | 'equipment',
-      description: item.description || undefined,
-      rarity: item.rarity as 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | undefined,
-      imageUrl: item.imageUrl || undefined,
-      farmingTime: item.farmingTime || undefined,
-      craftingTime: item.craftingTime || undefined,
-      craftingCost: [] // Will be populated by getCraftingCost if needed
-    }))
-  } catch (error) {
-    console.error('Error loading BitCraft items:', error)
-    return []
-  }
+  return getItemsFromCache()
 }
 
 // Cache for items to avoid repeated API calls
@@ -33,9 +15,19 @@ const getItemsFromCache = async (): Promise<BitCraftItem[]> => {
     return itemsCache
   }
   
+  // Use the main loader which includes crafting costs
+  itemsCache = await loadBitCraftItemsWithoutCache()
+  cacheTimestamp = Date.now()
+  return itemsCache
+}
+
+const loadBitCraftItemsWithoutCache = async (): Promise<BitCraftItem[]> => {
   try {
     const items = await api.getItems()
-    itemsCache = items.map(item => ({
+    
+    const bitCraftItems = await Promise.all(items.map(async item => {
+      const craftingCost = await getCraftingCost(item.id)
+      return {
       id: item.id,
       name: item.name,
       tier: item.tier,
@@ -45,20 +37,28 @@ const getItemsFromCache = async (): Promise<BitCraftItem[]> => {
       imageUrl: item.imageUrl || undefined,
       farmingTime: item.farmingTime || undefined,
       craftingTime: item.craftingTime || undefined,
-      craftingCost: [] // Will need to be populated from static data or additional API calls
+        craftingCost: craftingCost
+      }
     }))
-    cacheTimestamp = Date.now()
-    return itemsCache
+    
+    return bitCraftItems
   } catch (error) {
-    console.error('Error loading items from API:', error)
+    console.error('Error loading BitCraft items:', error)
     return []
   }
 }
 
-export const getCraftingCost = async (_itemId: string): Promise<CraftingCost[]> => {
-  // For now, return empty array since crafting costs aren't available via API
-  // This would need to be implemented in the server API
+export const getCraftingCost = async (itemId: string): Promise<CraftingCost[]> => {
+  try {
+    const recipe = await api.getItemRecipe(itemId)
+    return recipe.materials.map(material => ({
+      itemId: material.itemId,
+      quantity: material.quantity
+    }))
+  } catch (error) {
+    console.error('Error loading crafting cost:', error)
   return []
+  }
 }
 
 export const getItemById = async (itemId: string): Promise<BitCraftItem | undefined> => {
@@ -119,6 +119,7 @@ export const createItem = async (item: { name: string; tier: number; imageUrl?: 
     
     // Invalider le cache pour forcer le rechargement
     itemsCache = null
+    cacheTimestamp = 0
     
     return {
       id: newItem.id,
@@ -144,10 +145,31 @@ export const deleteItem = async (itemId: string): Promise<boolean> => {
     
     // Invalider le cache pour forcer le rechargement
     itemsCache = null
+    cacheTimestamp = 0
     
     return result.success
   } catch (error) {
     console.error('Error deleting item:', error)
     return false
   }
+}
+
+export const updateItem = async (itemId: string, updates: Partial<BitCraftItem>): Promise<boolean> => {
+  try {
+    const result = await api.updateItem(itemId, updates)
+    
+    // Invalider le cache pour forcer le rechargement
+    itemsCache = null
+    cacheTimestamp = 0
+    
+    return result.success
+  } catch (error) {
+    console.error('Error updating item:', error)
+    return false
+  }
+}
+
+export const invalidateItemsCache = () => {
+  itemsCache = null
+  cacheTimestamp = 0
 }

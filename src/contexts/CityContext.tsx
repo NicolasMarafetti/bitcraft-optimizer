@@ -39,18 +39,14 @@ export const CityProvider: React.FC<CityProviderProps> = ({ children }) => {
       setIsLoading(true)
       const cities = await getCities()
       
-      // Toujours inclure la ville par défaut
-      const allCities = Array.from(new Set([DEFAULT_CITY, ...cities]))
+      // Toujours inclure la ville par défaut et la ville actuellement sélectionnée
+      const allCities = Array.from(new Set([DEFAULT_CITY, selectedCity, ...cities]))
       setAvailableCities(allCities)
       
-      // Si la ville sélectionnée n'existe plus, revenir à la ville par défaut
-      if (!allCities.includes(selectedCity)) {
-        setSelectedCityState(DEFAULT_CITY)
-        localStorage.setItem(CITY_STORAGE_KEY, DEFAULT_CITY)
-      }
     } catch (error) {
       console.error('Erreur lors du chargement des villes:', error)
-      setAvailableCities([DEFAULT_CITY])
+      // En cas d'erreur, garder au moins la ville par défaut et la ville sélectionnée
+      setAvailableCities(Array.from(new Set([DEFAULT_CITY, selectedCity])))
     } finally {
       setIsLoading(false)
     }

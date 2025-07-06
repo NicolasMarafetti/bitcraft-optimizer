@@ -1,12 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 
-// Interface pour les réponses API
-interface ApiResponse<T> {
-  data?: T
-  error?: string
-  success?: boolean
-}
-
 // Types pour les objets de l'API
 interface ApiItem {
   id: string
@@ -95,6 +88,13 @@ class ApiClient {
     })
   }
 
+  async updateItem(itemId: string, updates: any): Promise<{ success: boolean }> {
+    return this.request(`/items/${itemId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    })
+  }
+
   // Prix
   async getPricesForCity(cityName: string): Promise<ApiPrice[]> {
     return this.request(`/prices/${encodeURIComponent(cityName)}`)
@@ -121,6 +121,24 @@ class ApiClient {
   async getCities(): Promise<string[]> {
     return this.request('/cities')
   }
+
+  // Recettes de craft
+  async getItemRecipe(itemId: string): Promise<{ materials: Array<{ itemId: string; quantity: number; item: ApiItem }> }> {
+    return this.request(`/items/${itemId}/recipe`)
+  }
+
+  async setItemRecipe(itemId: string, materials: Array<{ itemId: string; quantity: number }>): Promise<{ success: boolean; message: string }> {
+    return this.request(`/items/${itemId}/recipe`, {
+      method: 'POST',
+      body: JSON.stringify({ materials }),
+    })
+  }
+
+  async removeItemRecipe(itemId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/items/${itemId}/recipe`, {
+      method: 'DELETE',
+    })
+  }
 }
 
 // Instance singleton de l'API client
@@ -136,6 +154,7 @@ export const api = {
   initializeItems: (items: any[]) => apiClient.initializeItems(items),
   createItem: (item: { name: string; tier: number; imageUrl?: string }) => apiClient.createItem(item),
   deleteItem: (itemId: string) => apiClient.deleteItem(itemId),
+  updateItem: (itemId: string, updates: any) => apiClient.updateItem(itemId, updates),
 
   // Prix
   getPricesForCity: (cityName: string) => apiClient.getPricesForCity(cityName),
@@ -147,6 +166,12 @@ export const api = {
 
   // Villes
   getCities: () => apiClient.getCities(),
+
+  // Recettes de craft
+  getItemRecipe: (itemId: string) => apiClient.getItemRecipe(itemId),
+  setItemRecipe: (itemId: string, materials: Array<{ itemId: string; quantity: number }>) => 
+    apiClient.setItemRecipe(itemId, materials),
+  removeItemRecipe: (itemId: string) => apiClient.removeItemRecipe(itemId),
 }
 
 export default api

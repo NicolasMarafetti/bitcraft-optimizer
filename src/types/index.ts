@@ -37,6 +37,7 @@ export interface CraftingRecommendation {
   craftingCost: number
   materials: CraftingMaterial[]
   profitMargin: number
+  suggestedPrice: number
 }
 
 export interface CraftingMaterial {

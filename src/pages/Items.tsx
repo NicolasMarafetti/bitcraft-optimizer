@@ -1,42 +1,76 @@
 import { useState, useEffect } from 'react'
 import { BitCraftItem } from '../types'
-import { loadBitCraftItems, searchItems, createItem, deleteItem } from '../utils/dataLoader'
-import { initializePriceManager } from '../utils/priceManager'
+import { loadBitCraftItems, createItem, deleteItem, updateItem } from '../utils/dataLoader'
+import { initializePriceManager, getItemPriceSync } from '../utils/priceManager'
 import { initializeDatabase, checkApiConnection } from '../utils/initializeDatabase'
 import { useCity } from '../contexts/CityContext'
+import { useNotifications } from '../contexts/NotificationContext'
 import ItemCard from '../components/ItemCard'
 import PriceModal from '../components/PriceModal'
 import CreateItemModal from '../components/CreateItemModal'
+import RecipeModal from '../components/RecipeModal'
 
 export default function Items() {
   const { selectedCity } = useCity()
+  const { showLoading, showSuccess, showError, removeNotification } = useNotifications()
   const [items, setItems] = useState<BitCraftItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [filteredItems, setFilteredItems] = useState<BitCraftItem[]>([])
   const [selectedType, setSelectedType] = useState<string>('all')
+  const [selectedPriceStatus, setSelectedPriceStatus] = useState<string>('all')
   const [selectedItem, setSelectedItem] = useState<BitCraftItem | null>(null)
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false)
   const [isCreateItemModalOpen, setIsCreateItemModalOpen] = useState(false)
+  const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false)
+  const [selectedRecipeItem, setSelectedRecipeItem] = useState<BitCraftItem | null>(null)
   const [isApiConnected, setIsApiConnected] = useState<boolean | null>(null)
 
-  useEffect(() => {
-    const initializeData = async () => {
+  const loadItems = async () => {
+    const loadingId = showLoading('Chargement des objets...', 'Récupération de la liste des objets BitCraft')
+    try {
       const allItems = await loadBitCraftItems()
       setItems(allItems)
       setFilteredItems(allItems)
+      removeNotification(loadingId)
+      showSuccess('Objets chargés', `${allItems.length} objets récupérés avec succès`)
+    } catch (error) {
+      removeNotification(loadingId)
+      showError('Erreur de chargement', 'Impossible de charger les objets')
+    }
+  }
+
+  useEffect(() => {
+    const initializeData = async () => {
+      await loadItems()
 
       // Vérifier la connexion API
-      const apiConnected = await checkApiConnection()
-      setIsApiConnected(apiConnected)
+      const checkingId = showLoading('Vérification de l\'API...', 'Connexion au serveur')
+      try {
+        const apiConnected = await checkApiConnection()
+        setIsApiConnected(apiConnected)
+        removeNotification(checkingId)
 
-      if (apiConnected) {
-        // Initialiser la base de données si nécessaire
-        await initializeDatabase()
+        if (apiConnected) {
+          showSuccess('API connectée', 'Connexion au serveur réussie')
+          
+          // Initialiser la base de données si nécessaire
+          const dbId = showLoading('Initialisation...', 'Configuration de la base de données')
+          await initializeDatabase()
+          removeNotification(dbId)
 
-        // Initialiser le cache des prix
-        await initializePriceManager(selectedCity)
-      } else {
-        console.warn('API non disponible - mode hors ligne')
+          // Initialiser le cache des prix
+          const priceId = showLoading('Chargement des prix...', `Récupération des prix pour ${selectedCity}`)
+          await initializePriceManager(selectedCity)
+          removeNotification(priceId)
+          
+          showSuccess('Initialisation terminée', 'Toutes les données sont prêtes')
+        } else {
+          showError('API indisponible', 'Mode hors ligne activé')
+        }
+      } catch (error) {
+        removeNotification(checkingId)
+        showError('Erreur de connexion', 'Impossible de se connecter à l\'API')
+        setIsApiConnected(false)
       }
     }
 
@@ -57,24 +91,41 @@ export default function Items() {
   }, [selectedCity, isApiConnected])
 
   useEffect(() => {
-    const searchItemsEffect = async () => {
-      let result = items
+    let result = items
 
-      // Filtrer par recherche
-      if (searchQuery) {
-        result = await searchItems(searchQuery)
-      }
-
-      // Filtrer par type
-      if (selectedType !== 'all') {
-        result = result.filter(item => item.type === selectedType)
-      }
-
-      setFilteredItems(result)
+    // Filtrer par recherche
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase()
+      result = result.filter(item => 
+        item.name.toLowerCase().includes(lowerQuery) ||
+        item.description?.toLowerCase().includes(lowerQuery) ||
+        item.type.toLowerCase().includes(lowerQuery)
+      )
     }
 
-    searchItemsEffect();
-  }, [searchQuery, selectedType, items])
+    // Filtrer par type
+    if (selectedType !== 'all') {
+      result = result.filter(item => item.type === selectedType)
+    }
+
+    // Filtrer par statut de prix
+    if (selectedPriceStatus !== 'all') {
+      result = result.filter(item => {
+        const price = getItemPriceSync(item.id, selectedCity)
+        
+        switch (selectedPriceStatus) {
+          case 'with_price':
+            return price !== null
+          case 'without_price':
+            return price === null
+          default:
+            return true
+        }
+      })
+    }
+
+    setFilteredItems(result)
+  }, [searchQuery, selectedType, selectedPriceStatus, items, selectedCity])
 
   const handleSetPrice = (itemId: string) => {
     const item = items.find(i => i.id === itemId)
@@ -94,22 +145,86 @@ export default function Items() {
     setFilteredItems([...filteredItems])
   }
 
+  const handlePriceUpdate = () => {
+    // Force re-render pour mettre à jour les prix affichés après saisie rapide
+    // On force une mise à jour en changeant la référence des objets
+    setItems([...items])
+    setFilteredItems([...filteredItems])
+  }
+
   const handleDeleteItem = async (itemId: string) => {
-    const success = await deleteItem(itemId)
-    if (success) {
-      const updatedItems = items.filter(item => item.id !== itemId)
-      setItems(updatedItems)
-      setFilteredItems(updatedItems)
+    const deletingId = showLoading('Suppression...', 'Suppression de l\'objet en cours')
+    try {
+      const success = await deleteItem(itemId)
+      removeNotification(deletingId)
+      
+      if (success) {
+        showSuccess('Objet supprimé', 'L\'objet a été supprimé avec succès')
+        // Recharger les items depuis l'API pour s'assurer de la cohérence
+        await loadItems()
+      } else {
+        showError('Erreur de suppression', 'Impossible de supprimer l\'objet')
+      }
+    } catch (error) {
+      removeNotification(deletingId)
+      showError('Erreur de suppression', 'Une erreur est survenue lors de la suppression')
     }
   }
 
   const handleCreateItem = async (itemData: { name: string; tier: number; imageUrl?: string }) => {
-    const newItem = await createItem(itemData)
-    if (newItem) {
-      const updatedItems = [...items, newItem]
-      setItems(updatedItems)
-      setFilteredItems(updatedItems)
-      setIsCreateItemModalOpen(false)
+    const creatingId = showLoading('Création...', 'Création du nouvel objet')
+    try {
+      const newItem = await createItem(itemData)
+      removeNotification(creatingId)
+      
+      if (newItem) {
+        showSuccess('Objet créé', `${itemData.name} a été créé avec succès`)
+        // Recharger les items depuis l'API pour s'assurer de la cohérence
+        await loadItems()
+        setIsCreateItemModalOpen(false)
+      } else {
+        showError('Erreur de création', 'Impossible de créer l\'objet')
+      }
+    } catch (error) {
+      removeNotification(creatingId)
+      showError('Erreur de création', 'Une erreur est survenue lors de la création')
+    }
+  }
+
+  const handleSetRecipe = (item: BitCraftItem) => {
+    setSelectedRecipeItem(item)
+    setIsRecipeModalOpen(true)
+  }
+
+  const handleRecipeModalClose = () => {
+    setIsRecipeModalOpen(false)
+    setSelectedRecipeItem(null)
+  }
+
+  const handleRecipeSave = () => {
+    // Recharger les items pour mettre à jour les recettes
+    loadItems()
+  }
+
+  const handleUpdateImage = async (itemId: string, imageUrl: string): Promise<boolean> => {
+    const updatingId = showLoading('Mise à jour...', 'Mise à jour de l\'image')
+    try {
+      const success = await updateItem(itemId, { imageUrl })
+      removeNotification(updatingId)
+      
+      if (success) {
+        showSuccess('Image mise à jour', 'L\'image a été mise à jour avec succès')
+        // Recharger les items pour mettre à jour l'interface
+        await loadItems()
+        return true
+      } else {
+        showError('Erreur de mise à jour', 'Impossible de mettre à jour l\'image')
+        return false
+      }
+    } catch (error) {
+      removeNotification(updatingId)
+      showError('Erreur de mise à jour', 'Une erreur est survenue lors de la mise à jour')
+      return false
     }
   }
 
@@ -157,6 +272,17 @@ export default function Items() {
                 ))}
               </select>
             </div>
+            <div className="md:w-48">
+              <select
+                value={selectedPriceStatus}
+                onChange={(e) => setSelectedPriceStatus(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-bitcraft-primary bg-white text-gray-700"
+              >
+                <option value="all">Tous les prix</option>
+                <option value="without_price">🟠 À renseigner</option>
+                <option value="with_price">🟢 Prix renseigné</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-between items-center text-sm text-gray-600">
@@ -191,6 +317,9 @@ export default function Items() {
               cityName={selectedCity}
               onSetPrice={handleSetPrice}
               onDeleteItem={isApiConnected ? handleDeleteItem : undefined}
+              onPriceUpdate={handlePriceUpdate}
+              onSetRecipe={isApiConnected ? handleSetRecipe : undefined}
+              onUpdateImage={isApiConnected ? handleUpdateImage : undefined}
             />
           ))}
         </div>
@@ -218,6 +347,15 @@ export default function Items() {
         onClose={() => setIsCreateItemModalOpen(false)}
         onSave={handleCreateItem}
       />
+
+      {selectedRecipeItem && (
+        <RecipeModal
+          item={selectedRecipeItem}
+          isOpen={isRecipeModalOpen}
+          onClose={handleRecipeModalClose}
+          onSave={handleRecipeSave}
+        />
+      )}
     </div>
   )
 }

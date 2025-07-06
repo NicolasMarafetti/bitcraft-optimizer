@@ -1,116 +1,132 @@
-import { BitCraftItem, FarmingRecommendation, CraftingRecommendation, CraftingMaterial } from '../types'
+import { FarmingRecommendation, CraftingRecommendation, CraftingMaterial } from '../types'
 import { loadBitCraftItems, getItemById } from './dataLoader'
 import { getItemPriceSync } from './priceManager'
 
-export const calculateFarmingRecommendations = (cityName: string): FarmingRecommendation[] => {
-  const items = loadBitCraftItems()
-  const farmableItems = items.filter(item => 
-    item.type === 'resource' && 
-    item.farmingTime && 
-    item.farmingTime > 0
-  )
-  
+// Constants pour les calculs de prix
+const UNDERCUT_PERCENTAGE = 0.9 // 10% de reduction sur le prix existant
+const MAX_PROFIT_MARGIN = 1.2 // 20% de marge maximum sur le coût des matériaux
+
+export const calculateFarmingRecommendations = async (cityName: string): Promise<FarmingRecommendation[]> => {
+  const items = await loadBitCraftItems()
+
   const recommendations: FarmingRecommendation[] = []
-  
-  farmableItems.forEach(item => {
+
+  for (const item of items) {
     const price = getItemPriceSync(item.id, cityName)
-    if (price === null) return
-    
-    const profitPerHour = (price / (item.farmingTime! / 60)) // Convertir minutes en heures
-    
+    if (price === null) continue
+
+    let farmingTime = item.farmingTime || 1;
+    const profitPerHour = price ? (price / (farmingTime / 60)) : 9999; // Convertir minutes en heures
+
     recommendations.push({
       item,
       profitPerHour,
       farmingTime: item.farmingTime!,
       difficulty: getDifficultyFromFarmingTime(item.farmingTime!)
     })
-  })
-  
+  }
+
   return recommendations.sort((a, b) => b.profitPerHour - a.profitPerHour)
 }
 
-export const calculateCraftingRecommendations = (cityName: string): CraftingRecommendation[] => {
-  const items = loadBitCraftItems()
-  const craftableItems = items.filter(item => 
-    item.craftingCost && 
+export const calculateCraftingRecommendations = async (cityName: string): Promise<CraftingRecommendation[]> => {
+  const items = await loadBitCraftItems()
+
+  const craftableItems = items.filter((item: any) =>
+    item.craftingCost &&
     item.craftingCost.length > 0
   )
-  
+
   const recommendations: CraftingRecommendation[] = []
-  
-  craftableItems.forEach(item => {
+
+  for (const item of craftableItems) {
     const itemPrice = getItemPriceSync(item.id, cityName)
-    if (itemPrice === null) return
+
+    const materials = await calculateMaterialsCost(item.craftingCost!, cityName)
+    if (materials.length === 0) continue // Impossible de calculer si prix des matériaux manquants
+
+    const totalCost = materials.reduce((sum: number, material: CraftingMaterial) => sum + material.cost, 0)
     
-    const materials = calculateMaterialsCost(item.craftingCost!, cityName)
-    if (materials.length === 0) return // Impossible de calculer si prix des matériaux manquants
+    // Calculer le prix de vente suggéré avec marge limitée à 20%
+    let suggestedPrice: number
+    const maxPriceWithMargin = Math.ceil(totalCost * MAX_PROFIT_MARGIN)
     
-    const totalCost = materials.reduce((sum, material) => sum + material.cost, 0)
-    const profitPerCraft = itemPrice - totalCost
+    
+    if (itemPrice) {
+      // Si l'objet a un prix, undercut selon le pourcentage défini mais limité à 20% de marge
+      const undercutPrice = Math.ceil(itemPrice * UNDERCUT_PERCENTAGE)
+      suggestedPrice = Math.min(undercutPrice, maxPriceWithMargin)
+    } else {
+      // Si l'objet n'a pas de prix, vendre avec 20% de marge maximum
+      suggestedPrice = maxPriceWithMargin
+    }
+    
+    const profitPerCraft = suggestedPrice - totalCost
     const profitMargin = totalCost > 0 ? (profitPerCraft / totalCost) * 100 : 0
-    
+
     recommendations.push({
       item,
       profitPerCraft,
       craftingCost: totalCost,
       materials,
-      profitMargin
+      profitMargin,
+      suggestedPrice
     })
-  })
-  
+  }
+
   return recommendations
-    .filter(rec => rec.profitPerCraft > 0) // Seulement les crafts rentables
-    .sort((a, b) => b.profitPerCraft - a.profitPerCraft)
+    .filter(rec => rec.profitMargin > 0) // Seulement les crafts rentables
+    .sort((a, b) => b.profitMargin - a.profitMargin)
 }
 
-export const calculateMaterialsCost = (craftingCost: any[], cityName: string): CraftingMaterial[] => {
+export const calculateMaterialsCost = async (craftingCost: any[], cityName: string): Promise<CraftingMaterial[]> => {
   const materials: CraftingMaterial[] = []
-  
+
   for (const cost of craftingCost) {
-    const item = getItemById(cost.itemId)
+    const item = await getItemById(cost.itemId)
     if (!item) continue
-    
+
     const price = getItemPriceSync(cost.itemId, cityName)
     if (price === null) continue // Retourner un tableau vide si un prix manque
-    
+
     materials.push({
       item,
       quantity: cost.quantity,
       cost: price * cost.quantity
     })
   }
-  
+
   // Retourner un tableau vide si tous les prix ne sont pas disponibles
   if (materials.length !== craftingCost.length) {
     return []
   }
-  
+
   return materials
 }
 
-export const getBestFarmingOption = (cityName: string): FarmingRecommendation | null => {
-  const recommendations = calculateFarmingRecommendations(cityName)
+export const getBestFarmingOption = async (cityName: string): Promise<FarmingRecommendation | null> => {
+  const recommendations = await calculateFarmingRecommendations(cityName)
   return recommendations.length > 0 ? recommendations[0] : null
 }
 
-export const getBestCraftingOption = (cityName: string): CraftingRecommendation | null => {
-  const recommendations = calculateCraftingRecommendations(cityName)
+export const getBestCraftingOption = async (cityName: string): Promise<CraftingRecommendation | null> => {
+  const recommendations = await calculateCraftingRecommendations(cityName)
   return recommendations.length > 0 ? recommendations[0] : null
 }
 
-export const getOptimizationSummary = (cityName: string) => {
-  const items = loadBitCraftItems()
-  const farmingRecommendations = calculateFarmingRecommendations(cityName)
-  const craftingRecommendations = calculateCraftingRecommendations(cityName)
-  
+export const getOptimizationSummary = async (cityName: string) => {
+  const items = await loadBitCraftItems()
+  const farmingRecommendations = await calculateFarmingRecommendations(cityName)
+  const craftingRecommendations = await calculateCraftingRecommendations(cityName)
+
   return {
     totalItems: items.length,
     farmableItems: items.filter(item => item.type === 'resource' && item.farmingTime).length,
     craftableItems: items.filter(item => item.craftingCost && item.craftingCost.length > 0).length,
     farmingRecommendations: farmingRecommendations.length,
     craftingRecommendations: craftingRecommendations.length,
-    bestFarming: getBestFarmingOption(cityName),
-    bestCrafting: getBestCraftingOption(cityName)
+    bestFarming: await getBestFarmingOption(cityName),
+    bestCrafting: await getBestCraftingOption(cityName)
   }
 }
 

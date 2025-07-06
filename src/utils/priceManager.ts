@@ -15,6 +15,13 @@ export const addPrice = async (itemId: string, price: number, cityName: string):
 
     const apiPrice = await api.setItemPrice(item.name, price, cityName)
 
+    // Mettre à jour le cache immédiatement
+    const cacheKey = `${itemId}_${cityName}`
+    priceCache.set(cacheKey, apiPrice.price)
+    
+    // Invalider le cache pour forcer un refresh complet au prochain accès
+    lastCacheUpdate = 0
+
     return {
       id: apiPrice.id,
       itemId: itemId,
@@ -34,6 +41,16 @@ export const removePrice = async (itemId: string, cityName: string): Promise<boo
     if (!item) return false
 
     const result = await api.removeItemPrice(cityName, item.name)
+    
+    if (result.success) {
+      // Mettre à jour le cache immédiatement
+      const cacheKey = `${itemId}_${cityName}`
+      priceCache.delete(cacheKey)
+      
+      // Invalider le cache pour forcer un refresh complet au prochain accès
+      lastCacheUpdate = 0
+    }
+    
     return result.success
   } catch (error) {
     console.error('Erreur lors de la suppression du prix:', error)
@@ -100,6 +117,7 @@ const CACHE_DURATION = 30000 // 30 secondes
 
 export const getItemPriceSync = (itemId: string, cityName: string): number | null => {
   const cacheKey = `${itemId}_${cityName}`
+  const cachedPrice = priceCache.get(cacheKey) || null
 
   if (Date.now() - lastCacheUpdate > CACHE_DURATION && !isRefreshing) {
     // Cache expiré, mais on retourne quand même la valeur mise en cache si elle existe
@@ -107,7 +125,7 @@ export const getItemPriceSync = (itemId: string, cityName: string): number | nul
     refreshPriceCache(cityName)
   }
 
-  return priceCache.get(cacheKey) || null
+  return cachedPrice
 }
 
 export const refreshPriceCache = async (cityName: string) => {
