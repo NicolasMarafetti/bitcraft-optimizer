@@ -39,6 +39,7 @@ export const calculateCraftingRecommendations = async (cityName: string): Promis
 
   const recommendationsWithAllPrices: CraftingRecommendation[] = []
   const recommendationsWithMissingPrices: CraftingRecommendation[] = []
+  const recommendationsWithPriceOne: CraftingRecommendation[] = []
 
   for (const item of craftableItems) {
     const materials = await calculateMaterialsCost(item.craftingCost!, cityName)
@@ -48,14 +49,22 @@ export const calculateCraftingRecommendations = async (cityName: string): Promis
     if (materials.length > 0) {
       const recommendation = await createCraftingRecommendation(item, materials, cityName)
       if (recommendation) {
-        recommendationsWithAllPrices.push(recommendation)
+        if (recommendation.suggestedPrice === 1) {
+          recommendationsWithPriceOne.push(recommendation)
+        } else {
+          recommendationsWithAllPrices.push(recommendation)
+        }
       }
     }
     // Sinon, utiliser les prix estimés pour la liste secondaire
     else if (materialsWithEstimatedPrices.length > 0) {
       const recommendation = await createCraftingRecommendation(item, materialsWithEstimatedPrices, cityName)
       if (recommendation) {
-        recommendationsWithMissingPrices.push(recommendation)
+        if (recommendation.suggestedPrice === 1) {
+          recommendationsWithPriceOne.push(recommendation)
+        } else {
+          recommendationsWithMissingPrices.push(recommendation)
+        }
       }
     }
   }
@@ -63,9 +72,10 @@ export const calculateCraftingRecommendations = async (cityName: string): Promis
   // Trier chaque liste par marge de profit
   recommendationsWithAllPrices.sort((a, b) => b.profitMargin - a.profitMargin)
   recommendationsWithMissingPrices.sort((a, b) => b.profitMargin - a.profitMargin)
+  recommendationsWithPriceOne.sort((a, b) => b.profitMargin - a.profitMargin)
 
-  // Retourner d'abord celles avec tous les prix, puis celles avec prix manquants
-  return [...recommendationsWithAllPrices, ...recommendationsWithMissingPrices]
+  // Retourner d'abord celles avec tous les prix, puis celles avec prix manquants, puis celles avec prix à 1
+  return [...recommendationsWithAllPrices, ...recommendationsWithMissingPrices, ...recommendationsWithPriceOne]
 }
 
 export const calculateMaterialsCost = async (craftingCost: any[], cityName: string): Promise<CraftingMaterial[]> => {
@@ -141,7 +151,6 @@ export const createCraftingRecommendation = async (item: any, materials: Craftin
     totalRevenue += suggestedPrice * output.quantity
   }
 
-  if (undercutPrice === 1) return null; // Impossible de calculer si prix des outputs manquants ou à 1
 
   const profitPerCraft = totalRevenue - totalCost
   const profitMargin = totalCost > 0 ? (profitPerCraft / totalCost) * 100 : 0
