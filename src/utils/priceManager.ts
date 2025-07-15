@@ -125,7 +125,7 @@ export const getItemPriceSync = (itemId: string, cityName: string): number | nul
     refreshPriceCache(cityName)
   }
 
-  return cachedPrice
+  return cachedPrice;
 }
 
 export const refreshPriceCache = async (cityName: string) => {

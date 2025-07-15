@@ -9,9 +9,15 @@ export interface BitCraftItem {
   farmingTime?: number // en minutes
   craftingTime?: number // en minutes
   craftingCost?: CraftingCost[]
+  craftingOutputs?: CraftingOutput[]
 }
 
 export interface CraftingCost {
+  itemId: string
+  quantity: number
+}
+
+export interface CraftingOutput {
   itemId: string
   quantity: number
 }

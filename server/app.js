@@ -307,13 +307,26 @@ app.get('/api/items/:itemId/recipe', async (req, res) => {
       }
     })
 
-    const result = materials.map(cost => ({
+    const outputs = await prisma.craftingOutput.findMany({
+      where: { itemId },
+      include: {
+        outputItem: true
+      }
+    })
+
+    const materialsResult = materials.map(cost => ({
       itemId: cost.materialId,
       quantity: cost.quantity,
       item: cost.material
     }))
 
-    res.json({ materials: result })
+    const outputsResult = outputs.map(output => ({
+      itemId: output.outputItemId,
+      quantity: output.quantity,
+      item: output.outputItem
+    }))
+
+    res.json({ materials: materialsResult, outputs: outputsResult })
   } catch (error) {
     console.error('Erreur lors de la récupération de la recette:', error)
     res.status(500).json({ error: 'Erreur serveur' })
@@ -323,10 +336,14 @@ app.get('/api/items/:itemId/recipe', async (req, res) => {
 app.post('/api/items/:itemId/recipe', async (req, res) => {
   try {
     const { itemId } = req.params
-    const { materials } = req.body
+    const { materials, outputs } = req.body
 
     if (!materials || !Array.isArray(materials)) {
       return res.status(400).json({ error: 'Liste de matériaux requise' })
+    }
+
+    if (!outputs || !Array.isArray(outputs)) {
+      return res.status(400).json({ error: 'Liste d\'outputs requise' })
     }
 
     // Vérifier que l'objet existe
@@ -343,6 +360,10 @@ app.post('/api/items/:itemId/recipe', async (req, res) => {
       where: { itemId }
     })
 
+    await prisma.craftingOutput.deleteMany({
+      where: { itemId }
+    })
+
     // Créer les nouvelles recettes
     if (materials.length > 0) {
       await prisma.craftingCost.createMany({
@@ -350,6 +371,17 @@ app.post('/api/items/:itemId/recipe', async (req, res) => {
           itemId,
           materialId: material.itemId,
           quantity: material.quantity
+        }))
+      })
+    }
+
+    // Créer les nouveaux outputs
+    if (outputs.length > 0) {
+      await prisma.craftingOutput.createMany({
+        data: outputs.map(output => ({
+          itemId,
+          outputItemId: output.itemId,
+          quantity: output.quantity
         }))
       })
     }
@@ -366,6 +398,10 @@ app.delete('/api/items/:itemId/recipe', async (req, res) => {
     const { itemId } = req.params
 
     await prisma.craftingCost.deleteMany({
+      where: { itemId }
+    })
+
+    await prisma.craftingOutput.deleteMany({
       where: { itemId }
     })
 

@@ -123,14 +123,14 @@ class ApiClient {
   }
 
   // Recettes de craft
-  async getItemRecipe(itemId: string): Promise<{ materials: Array<{ itemId: string; quantity: number; item: ApiItem }> }> {
+  async getItemRecipe(itemId: string): Promise<{ materials: Array<{ itemId: string; quantity: number; item: ApiItem }>; outputs: Array<{ itemId: string; quantity: number; item: ApiItem }> }> {
     return this.request(`/items/${itemId}/recipe`)
   }
 
-  async setItemRecipe(itemId: string, materials: Array<{ itemId: string; quantity: number }>): Promise<{ success: boolean; message: string }> {
+  async setItemRecipe(itemId: string, materials: Array<{ itemId: string; quantity: number }>, outputs: Array<{ itemId: string; quantity: number }>): Promise<{ success: boolean; message: string }> {
     return this.request(`/items/${itemId}/recipe`, {
       method: 'POST',
-      body: JSON.stringify({ materials }),
+      body: JSON.stringify({ materials, outputs }),
     })
   }
 
@@ -169,8 +169,8 @@ export const api = {
 
   // Recettes de craft
   getItemRecipe: (itemId: string) => apiClient.getItemRecipe(itemId),
-  setItemRecipe: (itemId: string, materials: Array<{ itemId: string; quantity: number }>) => 
-    apiClient.setItemRecipe(itemId, materials),
+  setItemRecipe: (itemId: string, materials: Array<{ itemId: string; quantity: number }>, outputs: Array<{ itemId: string; quantity: number }>) => 
+    apiClient.setItemRecipe(itemId, materials, outputs),
   removeItemRecipe: (itemId: string) => apiClient.removeItemRecipe(itemId),
 }
 

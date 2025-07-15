@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BitCraftItem, CraftingCost } from '../types'
+import { BitCraftItem, CraftingCost, CraftingOutput } from '../types'
 import { api } from '../lib/api'
 import { loadBitCraftItems, invalidateItemsCache } from '../utils/dataLoader'
 
@@ -15,8 +15,14 @@ interface MaterialInput {
   quantity: number
 }
 
+interface OutputInput {
+  itemId: string
+  quantity: number
+}
+
 export default function RecipeModal({ item, isOpen, onClose, onSave }: RecipeModalProps) {
   const [materials, setMaterials] = useState<MaterialInput[]>([])
+  const [outputs, setOutputs] = useState<OutputInput[]>([])
   const [availableItems, setAvailableItems] = useState<BitCraftItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,6 +51,16 @@ export default function RecipeModal({ item, isOpen, onClose, onSave }: RecipeMod
       } else {
         setMaterials([{ itemId: '', quantity: 1 }])
       }
+
+      if (recipe.outputs && recipe.outputs.length > 0) {
+        setOutputs(recipe.outputs.map(o => ({
+          itemId: o.itemId,
+          quantity: o.quantity
+        })))
+      } else {
+        // Par défaut, 1 output de l'objet actuel
+        setOutputs([{ itemId: item.id, quantity: 1 }])
+      }
     } catch (err) {
       setError('Erreur lors du chargement des données')
       console.error('Error loading recipe data:', err)
@@ -71,18 +87,37 @@ export default function RecipeModal({ item, isOpen, onClose, onSave }: RecipeMod
     setMaterials(updatedMaterials)
   }
 
+  const addOutput = () => {
+    setOutputs([...outputs, { itemId: '', quantity: 1 }])
+  }
+
+  const removeOutput = (index: number) => {
+    setOutputs(outputs.filter((_, i) => i !== index))
+  }
+
+  const updateOutput = (index: number, field: keyof OutputInput, value: string | number) => {
+    const updatedOutputs = outputs.map((output, i) => {
+      if (i === index) {
+        return { ...output, [field]: value }
+      }
+      return output
+    })
+    setOutputs(updatedOutputs)
+  }
+
   const handleSave = async () => {
     setIsLoading(true)
     setError(null)
     try {
       const validMaterials = materials.filter(m => m.itemId && m.quantity > 0)
+      const validOutputs = outputs.filter(o => o.itemId && o.quantity > 0)
       
-      if (validMaterials.length === 0) {
-        // Supprimer la recette si aucun matériau
+      if (validMaterials.length === 0 && validOutputs.length === 0) {
+        // Supprimer la recette si aucun matériau ni output
         await api.removeItemRecipe(item.id)
       } else {
         // Sauvegarder la recette
-        await api.setItemRecipe(item.id, validMaterials)
+        await api.setItemRecipe(item.id, validMaterials, validOutputs)
       }
       
       // Invalider le cache pour forcer le rechargement des recettes
@@ -126,7 +161,7 @@ export default function RecipeModal({ item, isOpen, onClose, onSave }: RecipeMod
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div>
             <h3 className="text-lg font-semibold mb-3 text-gray-700">
               Matériaux nécessaires
@@ -176,16 +211,84 @@ export default function RecipeModal({ item, isOpen, onClose, onSave }: RecipeMod
             </button>
           </div>
 
-          {materials.length > 0 && materials.some(m => m.itemId) && (
+          <div>
+            <h3 className="text-lg font-semibold mb-3 text-gray-700">
+              Objets produits
+            </h3>
+            
+            {outputs.map((output, index) => (
+              <div key={index} className="flex items-center space-x-2 mb-3">
+                <select
+                  value={output.itemId}
+                  onChange={(e) => updateOutput(index, 'itemId', e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-bitcraft-primary"
+                  disabled={isLoading}
+                >
+                  <option value="">Sélectionner un objet</option>
+                  {availableItems.concat([item]).map(availableItem => (
+                    <option key={availableItem.id} value={availableItem.id}>
+                      {availableItem.name} (Tier {availableItem.tier})
+                    </option>
+                  ))}
+                </select>
+                
+                <input
+                  type="number"
+                  min="1"
+                  value={output.quantity}
+                  onChange={(e) => updateOutput(index, 'quantity', parseInt(e.target.value) || 1)}
+                  className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-bitcraft-primary"
+                  disabled={isLoading}
+                />
+                
+                <button
+                  onClick={() => removeOutput(index)}
+                  className="px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  disabled={isLoading}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            
+            <button
+              onClick={addOutput}
+              className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-gray-600 hover:border-bitcraft-primary hover:text-bitcraft-primary focus:outline-none focus:ring-2 focus:ring-bitcraft-primary"
+              disabled={isLoading}
+            >
+              + Ajouter un objet produit
+            </button>
+          </div>
+
+          {(materials.some(m => m.itemId) || outputs.some(o => o.itemId)) && (
             <div className="bg-gray-50 p-4 rounded-lg">
               <h4 className="font-semibold mb-2 text-gray-700">Aperçu de la recette :</h4>
-              <ul className="space-y-1">
-                {materials.filter(m => m.itemId && m.quantity > 0).map((material, index) => (
-                  <li key={index} className="text-sm text-gray-600">
-                    {material.quantity}x {getItemName(material.itemId)}
-                  </li>
-                ))}
-              </ul>
+              
+              {materials.some(m => m.itemId) && (
+                <div className="mb-3">
+                  <h5 className="font-medium text-gray-600 mb-1">Matériaux requis :</h5>
+                  <ul className="space-y-1">
+                    {materials.filter(m => m.itemId && m.quantity > 0).map((material, index) => (
+                      <li key={index} className="text-sm text-gray-600">
+                        {material.quantity}x {getItemName(material.itemId)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {outputs.some(o => o.itemId) && (
+                <div>
+                  <h5 className="font-medium text-gray-600 mb-1">Objets produits :</h5>
+                  <ul className="space-y-1">
+                    {outputs.filter(o => o.itemId && o.quantity > 0).map((output, index) => (
+                      <li key={index} className="text-sm text-gray-600">
+                        {output.quantity}x {output.itemId === item.id ? item.name : getItemName(output.itemId)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>

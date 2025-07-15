@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useCity } from '../contexts/CityContext'
 import { getOptimizationSummary, calculateFarmingRecommendations, calculateCraftingRecommendations, formatProfitPerHour, formatProfit, formatProfitMargin } from '../utils/optimizer'
-import { FarmingRecommendation, CraftingRecommendation } from '../types'
+import { FarmingRecommendation, CraftingRecommendation, BitCraftItem } from '../types'
 import { addPrice } from '../utils/priceManager'
+import { loadBitCraftItems } from '../utils/dataLoader'
 
 export default function Recommendations() {
   const { selectedCity } = useCity()
@@ -10,13 +11,16 @@ export default function Recommendations() {
   const [craftingRecommendations, setCraftingRecommendations] = useState<CraftingRecommendation[]>([])
   const [summary, setSummary] = useState<any>(null)
   const [updatingPrices, setUpdatingPrices] = useState<Set<string>>(new Set())
+  const [items, setItems] = useState<BitCraftItem[]>([])
 
   useEffect(() => {
     const updateRecommendations = async () => {
+      const allItems = await loadBitCraftItems()
       const farmingRecs = await calculateFarmingRecommendations(selectedCity)
       const craftingRecs = await calculateCraftingRecommendations(selectedCity)
       const optimizationSummary = await getOptimizationSummary(selectedCity)
 
+      setItems(allItems)
       setFarmingRecommendations(farmingRecs)
       setCraftingRecommendations(craftingRecs)
       setSummary(optimizationSummary)
@@ -28,15 +32,17 @@ export default function Recommendations() {
   const handleSetSaleOrder = async (recommendation: CraftingRecommendation) => {
     const itemId = recommendation.item.id
     setUpdatingPrices(prev => new Set(prev).add(itemId))
-    
+
     try {
       const success = await addPrice(itemId, recommendation.suggestedPrice, selectedCity)
       if (success) {
         // Recharger les recommandations pour refléter le nouveau prix
+        const allItems = await loadBitCraftItems()
         const farmingRecs = await calculateFarmingRecommendations(selectedCity)
         const craftingRecs = await calculateCraftingRecommendations(selectedCity)
         const optimizationSummary = await getOptimizationSummary(selectedCity)
 
+        setItems(allItems)
         setFarmingRecommendations(farmingRecs)
         setCraftingRecommendations(craftingRecs)
         setSummary(optimizationSummary)
@@ -105,78 +111,98 @@ export default function Recommendations() {
           </h2>
           <div className="space-y-3">
             {craftingRecommendations.length > 0 ? (
-              craftingRecommendations.slice(0, 3).map((rec, index) => {
+              craftingRecommendations.map((rec, index) => {
                 const isLowMargin = rec.profitMargin < 20
                 return (
-                <div key={rec.item.id} className={`p-4 rounded-lg border ${
-                  isLowMargin 
-                    ? 'bg-orange-50 border-orange-200' 
+                  <div key={rec.item.id} className={`p-4 rounded-lg border ${isLowMargin
+                    ? 'bg-orange-50 border-orange-200'
                     : 'bg-white border-gray-200'
-                }`}>
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-bitcraft-dark">{rec.item.name}</h3>
-                      <p className="text-sm text-gray-600">
-                        Tier {rec.item.tier} • Coût total: {formatProfit(rec.craftingCost)}
-                        {index === 0 && <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">🏆 Meilleur</span>}
-                        {isLowMargin && <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">⚠️ Faible marge</span>}
-                      </p>
-                      {rec.item.craftingTime && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          ⏱️ Temps de craft: {rec.item.craftingTime}min
+                    }`}>
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <h3 className="font-medium text-bitcraft-dark">{rec.item.name}</h3>
+                        <p className="text-sm text-gray-600">
+                          Tier {rec.item.tier} • Coût total: {formatProfit(rec.craftingCost)}
+                          {index === 0 && <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">🏆 Meilleur</span>}
+                          {isLowMargin && <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">⚠️ Faible marge</span>}
                         </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-lg font-semibold ${
-                        isLowMargin ? 'text-orange-600' : 'text-bitcraft-accent'
-                      }`}>
-                        +{formatProfitMargin(rec.profitMargin)}
+                        {rec.item.craftingTime && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            ⏱️ Temps de craft: {rec.item.craftingTime}min
+                          </p>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-500 mb-1">
-                        Marge bénéficiaire
-                      </div>
-                      <div className="text-sm text-green-600 font-medium mb-2">
-                        Vendre à {formatProfit(rec.suggestedPrice)}
-                      </div>
-                      <div className="text-xs text-gray-600 mb-2">
-                        Profit: {formatProfit(rec.profitPerCraft)}
-                      </div>
-                      <button
-                        onClick={() => handleSetSaleOrder(rec)}
-                        disabled={updatingPrices.has(rec.item.id)}
-                        className={`text-xs px-3 py-1 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                          isLowMargin 
-                            ? 'bg-orange-500 text-white hover:bg-orange-600' 
-                            : 'bg-green-500 text-white hover:bg-green-600'
-                        }`}
-                      >
-                        {updatingPrices.has(rec.item.id) ? '⏳' : '📋 Ordre mis'}
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Liste des ingrédients */}
-                  <div className="border-t pt-3 mt-3">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">📦 Ingrédients requis:</h4>
-                    <div className="space-y-1">
-                      {rec.materials.map((material, materialIndex) => (
-                        <div key={materialIndex} className="flex justify-between items-center text-sm">
-                          <span className="text-gray-600">
-                            {material.quantity}x {material.item.name}
-                          </span>
-                          <span className="text-gray-500 font-medium">
-                            {formatProfit(material.cost)}
-                          </span>
+                      <div className="text-right">
+                        <div className={`text-lg font-semibold ${isLowMargin ? 'text-orange-600' : 'text-bitcraft-accent'
+                          }`}>
+                          +{formatProfitMargin(rec.profitMargin)}
                         </div>
-                      ))}
+                        <div className="text-xs text-gray-500 mb-1">
+                          Marge bénéficiaire
+                        </div>
+                        <div className="text-sm text-green-600 font-medium mb-2">
+                          Revenu total: {formatProfit(rec.suggestedPrice * (rec.item.craftingOutputs?.[0]?.quantity || 1))}
+                        </div>
+                        <div className="text-xs text-gray-600 mb-2">
+                          Profit: {formatProfit(rec.profitPerCraft)}
+                        </div>
+                        <button
+                          onClick={() => handleSetSaleOrder(rec)}
+                          disabled={updatingPrices.has(rec.item.id)}
+                          className={`text-xs px-3 py-1 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isLowMargin
+                            ? 'bg-orange-500 text-white hover:bg-orange-600'
+                            : 'bg-green-500 text-white hover:bg-green-600'
+                            }`}
+                        >
+                          {updatingPrices.has(rec.item.id) ? '⏳' : '📋 Ordre mis'}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center text-sm font-medium pt-2 border-t border-gray-100 mt-2">
-                      <span className="text-gray-700">Total matériaux:</span>
-                      <span className="text-gray-800">{formatProfit(rec.craftingCost)}</span>
+
+                    {/* Liste des ingrédients */}
+                    <div className="border-t pt-3 mt-3">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">📦 Ingrédients requis:</h4>
+                      <div className="space-y-1">
+                        {rec.materials.map((material, materialIndex) => (
+                          <div key={materialIndex} className="flex justify-between items-center text-sm">
+                            <span className="text-gray-600">
+                              {material.quantity}x {material.item.name}
+                            </span>
+                            <span className="text-gray-500 font-medium">
+                              {formatProfit(material.cost)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between items-center text-sm font-medium pt-2 border-t border-gray-100 mt-2">
+                        <span className="text-gray-700">Total matériaux:</span>
+                        <span className="text-gray-800">{formatProfit(rec.craftingCost)}</span>
+                      </div>
                     </div>
+
+                    {/* Liste des outputs produits */}
+                    {rec.item.craftingOutputs && rec.item.craftingOutputs.length > 0 && (
+                      <div className="border-t pt-3 mt-3">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">📋 Objets produits:</h4>
+                        <div className="space-y-1">
+                          {rec.item.craftingOutputs.map((output, outputIndex) => {
+                            const outputItem = items.find(item => item.id === output.itemId)
+
+                            return (
+                              <div key={outputIndex} className="flex justify-between items-center text-sm">
+                                <span className="text-gray-600">
+                                  {output.quantity}x {outputItem?.name || 'Objet inconnu'}
+                                </span>
+                                <span className="text-gray-500 font-medium">
+                                  {rec.suggestedPrice ? `${output.quantity}x ${rec.suggestedPrice} = ${formatProfit(rec.suggestedPrice * output.quantity)}` : 'Prix non défini'}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
                 )
               })
             ) : (

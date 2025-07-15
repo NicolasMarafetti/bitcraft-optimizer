@@ -37,45 +37,35 @@ export const calculateCraftingRecommendations = async (cityName: string): Promis
     item.craftingCost.length > 0
   )
 
-  const recommendations: CraftingRecommendation[] = []
+  const recommendationsWithAllPrices: CraftingRecommendation[] = []
+  const recommendationsWithMissingPrices: CraftingRecommendation[] = []
 
   for (const item of craftableItems) {
-    const itemPrice = getItemPriceSync(item.id, cityName)
-
     const materials = await calculateMaterialsCost(item.craftingCost!, cityName)
-    if (materials.length === 0) continue // Impossible de calculer si prix des matériaux manquants
-
-    const totalCost = materials.reduce((sum: number, material: CraftingMaterial) => sum + material.cost, 0)
-
-    // Calculer le prix de vente suggéré avec marge limitée à 20%
-    let suggestedPrice: number
-    const maxPriceWithMargin = Math.ceil(totalCost * MAX_PROFIT_MARGIN)
-
-
-    if (itemPrice) {
-      // Si l'objet a un prix, undercut selon le pourcentage défini mais limité à 20% de marge
-      const undercutPrice = Math.floor(itemPrice * UNDERCUT_PERCENTAGE)
-      suggestedPrice = Math.min(undercutPrice, maxPriceWithMargin)
-    } else {
-      // Si l'objet n'a pas de prix, vendre avec 20% de marge maximum
-      suggestedPrice = maxPriceWithMargin
+    const materialsWithEstimatedPrices = await calculateMaterialsCostWithEstimation(item.craftingCost!, cityName)
+    
+    // Si tous les prix sont disponibles, utiliser la liste principale
+    if (materials.length > 0) {
+      const recommendation = await createCraftingRecommendation(item, materials, cityName)
+      if (recommendation) {
+        recommendationsWithAllPrices.push(recommendation)
+      }
     }
-
-    const profitPerCraft = suggestedPrice - totalCost
-    const profitMargin = totalCost > 0 ? (profitPerCraft / totalCost) * 100 : 0
-
-    recommendations.push({
-      item,
-      profitPerCraft,
-      craftingCost: totalCost,
-      materials,
-      profitMargin,
-      suggestedPrice
-    })
+    // Sinon, utiliser les prix estimés pour la liste secondaire
+    else if (materialsWithEstimatedPrices.length > 0) {
+      const recommendation = await createCraftingRecommendation(item, materialsWithEstimatedPrices, cityName)
+      if (recommendation) {
+        recommendationsWithMissingPrices.push(recommendation)
+      }
+    }
   }
 
-  return recommendations
-    .sort((a, b) => b.profitMargin - a.profitMargin)
+  // Trier chaque liste par marge de profit
+  recommendationsWithAllPrices.sort((a, b) => b.profitMargin - a.profitMargin)
+  recommendationsWithMissingPrices.sort((a, b) => b.profitMargin - a.profitMargin)
+
+  // Retourner d'abord celles avec tous les prix, puis celles avec prix manquants
+  return [...recommendationsWithAllPrices, ...recommendationsWithMissingPrices]
 }
 
 export const calculateMaterialsCost = async (craftingCost: any[], cityName: string): Promise<CraftingMaterial[]> => {
@@ -86,7 +76,7 @@ export const calculateMaterialsCost = async (craftingCost: any[], cityName: stri
     if (!item) continue
 
     const price = getItemPriceSync(cost.itemId, cityName)
-    if (price === null) continue // Retourner un tableau vide si un prix manque
+    if (price === null) return [] // Retourner tableau vide si un prix manque
 
     materials.push({
       item,
@@ -95,12 +85,75 @@ export const calculateMaterialsCost = async (craftingCost: any[], cityName: stri
     })
   }
 
-  // Retourner un tableau vide si tous les prix ne sont pas disponibles
-  if (materials.length !== craftingCost.length) {
-    return []
+  return materials
+}
+
+export const calculateMaterialsCostWithEstimation = async (craftingCost: any[], cityName: string): Promise<CraftingMaterial[]> => {
+  const materials: CraftingMaterial[] = []
+
+  for (const cost of craftingCost) {
+    const item = await getItemById(cost.itemId)
+    if (!item) continue
+
+    let price = getItemPriceSync(cost.itemId, cityName)
+    if (price === null) price = 1; // Prix estimé à 1 si non disponible
+
+    materials.push({
+      item,
+      quantity: cost.quantity,
+      cost: price * cost.quantity
+    })
   }
 
   return materials
+}
+
+export const createCraftingRecommendation = async (item: any, materials: CraftingMaterial[], cityName: string): Promise<CraftingRecommendation | null> => {
+  const totalCost = materials.reduce((sum: number, material: CraftingMaterial) => sum + material.cost, 0)
+
+  // Calculer les revenus des outputs
+  const outputs = item.craftingOutputs || [{ itemId: item.id, quantity: 1 }]
+  let totalRevenue = 0
+
+  // Calculer le prix de vente suggéré avec marge limitée à 20%
+  let suggestedPrice: number = 0;
+  let undercutPrice: number = 0;
+  const maxPriceWithMargin = Math.ceil(totalCost * MAX_PROFIT_MARGIN)
+
+  for (const output of outputs) {
+    const outputPrice = getItemPriceSync(output.itemId, cityName)
+
+    if (outputPrice) {
+      // J'aimerai que le prix de vente suggéré soit 10% en dessous du prix de vente actuel. Arrondi au chiffre supérieur. Mais qui ne doit pas être égal au chiffre de vente actuel
+      suggestedPrice = Math.ceil(outputPrice * UNDERCUT_PERCENTAGE)
+      if (suggestedPrice > 1 && suggestedPrice >= outputPrice) {
+        suggestedPrice = outputPrice - 1
+      }
+      // Limiter le prix suggéré à la marge maximale de 20%
+      suggestedPrice = Math.min(suggestedPrice, maxPriceWithMargin)
+      undercutPrice = suggestedPrice;
+    }
+  }
+
+  if (!suggestedPrice) suggestedPrice = Math.ceil(maxPriceWithMargin / outputs[0].quantity);
+
+  for (const output of outputs) {
+    totalRevenue += suggestedPrice * output.quantity
+  }
+
+  if (undercutPrice === 1) return null; // Impossible de calculer si prix des outputs manquants ou à 1
+
+  const profitPerCraft = totalRevenue - totalCost
+  const profitMargin = totalCost > 0 ? (profitPerCraft / totalCost) * 100 : 0
+
+  return {
+    item,
+    profitPerCraft,
+    craftingCost: totalCost,
+    materials,
+    profitMargin,
+    suggestedPrice
+  }
 }
 
 export const getBestFarmingOption = async (cityName: string): Promise<FarmingRecommendation | null> => {

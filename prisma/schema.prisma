@@ -25,6 +25,8 @@ model BitCraftItem {
   prices        ItemPrice[]
   craftingCosts CraftingCost[]
   materials     CraftingCost[] @relation("MaterialFor")
+  craftingOutputs CraftingOutput[]
+  outputFor     CraftingOutput[] @relation("OutputFor")
   
   @@map("bitcraft_items")
 }
@@ -41,6 +43,20 @@ model CraftingCost {
   materialId String       @db.ObjectId
   
   @@map("crafting_costs")
+}
+
+model CraftingOutput {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  quantity  Int
+  
+  // Relations
+  item       BitCraftItem @relation(fields: [itemId], references: [id])
+  itemId     String       @db.ObjectId
+  
+  outputItem   BitCraftItem @relation("OutputFor", fields: [outputItemId], references: [id])
+  outputItemId String       @db.ObjectId
+  
+  @@map("crafting_outputs")
 }
 
 model ItemPrice {

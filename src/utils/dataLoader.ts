@@ -1,4 +1,4 @@
-import { BitCraftItem, CraftingCost } from '../types'
+import { BitCraftItem, CraftingCost, CraftingOutput } from '../types'
 import { api } from '../lib/api'
 
 export const loadBitCraftItems = async (): Promise<BitCraftItem[]> => {
@@ -27,6 +27,7 @@ const loadBitCraftItemsWithoutCache = async (): Promise<BitCraftItem[]> => {
     
     const bitCraftItems = await Promise.all(items.map(async item => {
       const craftingCost = await getCraftingCost(item.id)
+      const craftingOutputs = await getCraftingOutputs(item.id)
       return {
       id: item.id,
       name: item.name,
@@ -37,7 +38,8 @@ const loadBitCraftItemsWithoutCache = async (): Promise<BitCraftItem[]> => {
       imageUrl: item.imageUrl || undefined,
       farmingTime: item.farmingTime || undefined,
       craftingTime: item.craftingTime || undefined,
-        craftingCost: craftingCost
+        craftingCost: craftingCost,
+        craftingOutputs: craftingOutputs
       }
     }))
     
@@ -58,6 +60,19 @@ export const getCraftingCost = async (itemId: string): Promise<CraftingCost[]> =
   } catch (error) {
     console.error('Error loading crafting cost:', error)
   return []
+  }
+}
+
+export const getCraftingOutputs = async (itemId: string): Promise<CraftingOutput[]> => {
+  try {
+    const recipe = await api.getItemRecipe(itemId)
+    return recipe.outputs.map(output => ({
+      itemId: output.itemId,
+      quantity: output.quantity
+    }))
+  } catch (error) {
+    console.error('Error loading crafting outputs:', error)
+    return []
   }
 }
 
@@ -131,7 +146,8 @@ export const createItem = async (item: { name: string; tier: number; imageUrl?: 
       imageUrl: newItem.imageUrl,
       farmingTime: newItem.farmingTime,
       craftingTime: newItem.craftingTime,
-      craftingCost: []
+      craftingCost: [],
+      craftingOutputs: []
     }
   } catch (error) {
     console.error('Error creating item:', error)
