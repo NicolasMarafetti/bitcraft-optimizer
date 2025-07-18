@@ -5,20 +5,12 @@
       "Bash(cd:*)",
       "Bash(npm run:*)",
       "Bash(grep:*)",
-      "Bash(cd:*)",
-      "Bash(cd:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(cd:*)",
       "Bash(git config:*)",
       "Bash(git push -u origin master)",
-      "Bash(cd:*)",
-      "Bash(cd:*)",
-      "Bash(cd:*)",
-      "Bash(cd:*)",
       "Bash(curl:*)",
-      "Bash(cd:*)",
-      "Bash(cd:*)"
+      "Bash(git push:*)"
     ],
     "deny": []
   }

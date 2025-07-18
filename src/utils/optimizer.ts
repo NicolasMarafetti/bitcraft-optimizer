@@ -44,7 +44,7 @@ export const calculateCraftingRecommendations = async (cityName: string): Promis
   for (const item of craftableItems) {
     const materials = await calculateMaterialsCost(item.craftingCost!, cityName)
     const materialsWithEstimatedPrices = await calculateMaterialsCostWithEstimation(item.craftingCost!, cityName)
-    
+
     // Si tous les prix sont disponibles, utiliser la liste principale
     if (materials.length > 0) {
       const recommendation = await createCraftingRecommendation(item, materials, cityName)
@@ -69,10 +69,32 @@ export const calculateCraftingRecommendations = async (cityName: string): Promis
     }
   }
 
-  // Trier chaque liste par marge de profit
-  recommendationsWithAllPrices.sort((a, b) => b.profitMargin - a.profitMargin)
-  recommendationsWithMissingPrices.sort((a, b) => b.profitMargin - a.profitMargin)
-  recommendationsWithPriceOne.sort((a, b) => b.profitMargin - a.profitMargin)
+  // Fonction de tri personnalisée : bénéfice >20% par prix croissant, puis le reste par marge décroissante
+  const customSort = (a: CraftingRecommendation, b: CraftingRecommendation) => {
+    const aHighMargin = a.profitMargin >= 20
+    const bHighMargin = b.profitMargin >= 20
+
+    // Si les deux ont >20% de marge, trier par prix de vente croissant
+    if (aHighMargin && bHighMargin) {
+      return a.suggestedPrice - b.suggestedPrice
+    }
+
+    // Prioriser ceux avec >20% de marge
+    if (aHighMargin && !bHighMargin) {
+      return -1
+    }
+    if (!aHighMargin && bHighMargin) {
+      return 1
+    }
+
+    // Pour le reste, trier par marge décroissante
+    return b.profitMargin - a.profitMargin
+  }
+
+  // Appliquer le tri personnalisé à chaque liste
+  recommendationsWithAllPrices.sort(customSort)
+  recommendationsWithMissingPrices.sort(customSort)
+  recommendationsWithPriceOne.sort(customSort)
 
   // Retourner d'abord celles avec tous les prix, puis celles avec prix manquants, puis celles avec prix à 1
   return [...recommendationsWithAllPrices, ...recommendationsWithMissingPrices, ...recommendationsWithPriceOne]
@@ -127,7 +149,6 @@ export const createCraftingRecommendation = async (item: any, materials: Craftin
 
   // Calculer le prix de vente suggéré avec marge limitée à 20%
   let suggestedPrice: number = 0;
-  let undercutPrice: number = 0;
   const maxPriceWithMargin = Math.ceil(totalCost * MAX_PROFIT_MARGIN)
 
   for (const output of outputs) {
@@ -141,7 +162,6 @@ export const createCraftingRecommendation = async (item: any, materials: Craftin
       }
       // Limiter le prix suggéré à la marge maximale de 20%
       suggestedPrice = Math.min(suggestedPrice, maxPriceWithMargin)
-      undercutPrice = suggestedPrice;
     }
   }
 
@@ -150,7 +170,6 @@ export const createCraftingRecommendation = async (item: any, materials: Craftin
   for (const output of outputs) {
     totalRevenue += suggestedPrice * output.quantity
   }
-
 
   const profitPerCraft = totalRevenue - totalCost
   const profitMargin = totalCost > 0 ? (profitPerCraft / totalCost) * 100 : 0
