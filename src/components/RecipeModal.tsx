@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { BitCraftItem, CraftingCost, CraftingOutput } from '../types'
 import { api } from '../lib/api'
 import { loadBitCraftItems, invalidateItemsCache } from '../utils/dataLoader'
+import AutocompleteSelect from './AutocompleteSelect'
 
 interface RecipeModalProps {
   item: BitCraftItem
@@ -169,19 +170,14 @@ export default function RecipeModal({ item, isOpen, onClose, onSave }: RecipeMod
             
             {materials.map((material, index) => (
               <div key={index} className="flex items-center space-x-2 mb-3">
-                <select
+                <AutocompleteSelect
                   value={material.itemId}
-                  onChange={(e) => updateMaterial(index, 'itemId', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-bitcraft-primary"
+                  onChange={(value) => updateMaterial(index, 'itemId', value)}
+                  items={availableItems}
+                  placeholder="Rechercher un matériau..."
                   disabled={isLoading}
-                >
-                  <option value="">Sélectionner un objet</option>
-                  {availableItems.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} (Tier {item.tier})
-                    </option>
-                  ))}
-                </select>
+                  className="flex-1"
+                />
                 
                 <input
                   type="number"
@@ -218,19 +214,14 @@ export default function RecipeModal({ item, isOpen, onClose, onSave }: RecipeMod
             
             {outputs.map((output, index) => (
               <div key={index} className="flex items-center space-x-2 mb-3">
-                <select
+                <AutocompleteSelect
                   value={output.itemId}
-                  onChange={(e) => updateOutput(index, 'itemId', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-bitcraft-primary"
+                  onChange={(value) => updateOutput(index, 'itemId', value)}
+                  items={availableItems.concat([item])}
+                  placeholder="Rechercher un objet produit..."
                   disabled={isLoading}
-                >
-                  <option value="">Sélectionner un objet</option>
-                  {availableItems.concat([item]).map(availableItem => (
-                    <option key={availableItem.id} value={availableItem.id}>
-                      {availableItem.name} (Tier {availableItem.tier})
-                    </option>
-                  ))}
-                </select>
+                  className="flex-1"
+                />
                 
                 <input
                   type="number"
