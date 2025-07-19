@@ -10,7 +10,7 @@ interface ItemCardProps {
   onDeleteItem?: (itemId: string) => void
   onPriceUpdate?: () => void
   onSetRecipe?: (item: BitCraftItem) => void
-  onUpdateImage?: (itemId: string, imageUrl: string) => void
+  onUpdateImage?: (itemId: string, imageUrl: string) => Promise<boolean>
 }
 
 export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onPriceUpdate, onSetRecipe, onUpdateImage }: ItemCardProps) {
@@ -23,7 +23,7 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
   const inputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const price = getItemPriceSync(item.id, cityName)
-  
+
   const handleCopyName = async () => {
     try {
       await navigator.clipboard.writeText(item.name)
@@ -38,10 +38,10 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
 
   const handleQuickPriceSubmit = async () => {
     const priceValue = parseFloat(quickPrice)
-    
+
     if (!isNaN(priceValue) && priceValue > 0) {
       const result = await addPrice(item.id, priceValue, cityName)
-      
+
       if (result) {
         showSuccess('Prix mis à jour', `${item.name}: ${priceValue} pièces`)
         setIsQuickEditMode(false)
@@ -108,7 +108,7 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
     tool: 'bg-purple-100 text-purple-800',
     equipment: 'bg-orange-100 text-orange-800'
   }
-  
+
   const rarityColors = {
     common: 'border-gray-300',
     uncommon: 'border-green-400',
@@ -116,7 +116,7 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
     epic: 'border-purple-400',
     legendary: 'border-yellow-400'
   }
-  
+
   return (
     <div className={`bg-white rounded-lg p-4 border-2 ${rarityColors[item.rarity || 'common']} shadow-sm hover:shadow-md transition-shadow`}>
       <div className="flex justify-between items-start mb-2">
@@ -140,7 +140,7 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${typeColors[item.type as keyof typeof typeColors]}`}>
             Tier {item.tier}
           </span>
-          {onSetRecipe && (item.type === 'crafted' || item.type === 'tool' || item.type === 'equipment') && (
+          {onSetRecipe && (
             <button
               onClick={() => onSetRecipe(item)}
               className="text-bitcraft-primary hover:text-bitcraft-secondary transition-colors p-1 rounded"
@@ -164,11 +164,11 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
           )}
         </div>
       </div>
-      
+
       <div className="mb-3 flex justify-center items-center space-x-2">
         {item.imageUrl && !isImageEditMode && (
-          <img 
-            src={item.imageUrl} 
+          <img
+            src={item.imageUrl}
             alt={item.name}
             className="w-16 h-16 object-cover rounded-lg border border-gray-200"
             onError={(e) => {
@@ -219,31 +219,31 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
           </button>
         )}
       </div>
-      
+
       {item.description && (
         <p className="text-sm text-gray-600 mb-3">{item.description}</p>
       )}
-      
+
       <div className="space-y-2">
         <div className="flex justify-between items-center text-sm">
           <span className="text-gray-500">Type:</span>
           <span className="font-medium capitalize">{item.type}</span>
         </div>
-        
+
         {item.farmingTime && (
           <div className="flex justify-between items-center text-sm">
             <span className="text-gray-500">Temps de récolte:</span>
             <span className="font-medium">{item.farmingTime} min</span>
           </div>
         )}
-        
+
         {item.craftingTime && (
           <div className="flex justify-between items-center text-sm">
             <span className="text-gray-500">Temps de craft:</span>
             <span className="font-medium">{item.craftingTime} min</span>
           </div>
         )}
-        
+
         {item.craftingCost && item.craftingCost.length > 0 && (
           <div className="text-sm">
             <span className="text-gray-500">Recette:</span>
@@ -257,7 +257,7 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
             </div>
           </div>
         )}
-        
+
         <div className="flex justify-between items-center pt-2 border-t">
           <span className="text-sm font-medium text-gray-700">Prix:</span>
           <div className="flex items-center space-x-2">
@@ -296,8 +296,8 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
               <>
                 {price !== null ? (
                   <div className="flex items-center space-x-2">
-                    <div 
-                      className="flex items-center space-x-2 cursor-pointer group" 
+                    <div
+                      className="flex items-center space-x-2 cursor-pointer group"
                       onClick={startQuickEdit}
                       title="Cliquer pour modifier rapidement"
                     >
@@ -320,8 +320,8 @@ export default function ItemCard({ item, cityName, onSetPrice, onDeleteItem, onP
                     </button>
                   </div>
                 ) : (
-                  <div 
-                    className="flex items-center space-x-2 cursor-pointer group" 
+                  <div
+                    className="flex items-center space-x-2 cursor-pointer group"
                     onClick={startQuickEdit}
                     title="Cliquer pour renseigner le prix"
                   >
